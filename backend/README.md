@@ -138,10 +138,3 @@ The SQLite database is created automatically on first startup. Interactive docs 
 **`database is locked`** — Occurs when running multiple workers against the same SQLite file. Use a single worker locally, or switch to PostgreSQL for multi-worker deployments.
 
 ---
-
-## Production Considerations
-
-- Replace SQLite with PostgreSQL and update `DATABASE_URL`.
-- Run Uvicorn behind a reverse proxy (Nginx). Remove `--reload` and set `--workers` appropriately.
-- Store `GEMINI_API_KEY` in a secrets manager, not a plain `.env` file.
-- Add rate limiting on the `/extract` endpoint.
