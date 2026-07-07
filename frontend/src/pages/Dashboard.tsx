@@ -11,12 +11,12 @@ import { Sparkles, Download, AlertCircle, ArrowRight, Calendar, User } from 'luc
 import { formatDate } from '../utils/formatDate';
 
 export const Dashboard: FC = () => {
-  const { tasks, isLoading, error, fetchTasks } = useTasks();
+  const { tasks, isLoading, error, fetchAllTasks } = useTasks();
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    fetchAllTasks();
+  }, [fetchAllTasks]);
 
   const handleExportCsv = () => {
     if (tasks.length > 0) {

@@ -24,6 +24,7 @@ if settings.cors_origins:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Content-Type", "Accept", "Authorization"],
+        expose_headers=["Retry-After"],
     )
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

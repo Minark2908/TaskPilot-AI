@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
+from app.core.rate_limiter import extractor_limiter
 from app.schemas.extractor import ExtractionRequest
 from app.schemas.task import Task, TaskCreate
 from app.services.llm_service import extract_tasks_from_text
@@ -12,7 +13,11 @@ from app.services import task_service
 router = APIRouter()
 
 @router.post("/extract", response_model=List[Task], status_code=status.HTTP_201_CREATED)
-def extract_and_save_tasks(payload: ExtractionRequest, db: Session = Depends(get_db)):
+def extract_and_save_tasks(
+    payload: ExtractionRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(extractor_limiter),
+):
     try:
         extracted = extract_tasks_from_text(payload.text)
     except ValueError as exc:

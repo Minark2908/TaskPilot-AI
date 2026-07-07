@@ -1,5 +1,18 @@
 import { api } from './api';
-import { Task, TaskUpdate } from '../types';
+import { Task, TaskPage, TaskQueryParams, TaskUpdate } from '../types';
+
+function buildTaskParams(params: TaskQueryParams = {}) {
+  const query: Record<string, string | number> = {};
+
+  if (params.skip !== undefined) query.skip = params.skip;
+  if (params.limit !== undefined) query.limit = params.limit;
+  if (params.search?.trim()) query.search = params.search.trim();
+  if (params.owner) query.owner = params.owner;
+  if (params.priority) query.priority = params.priority;
+  if (params.status) query.status = params.status;
+
+  return query;
+}
 
 export const taskService = {
   async extractTasks(text: string): Promise<Task[]> {
@@ -7,10 +20,31 @@ export const taskService = {
     return response.data;
   },
 
-  async getTasks(skip = 0, limit = 100): Promise<Task[]> {
-    const response = await api.get<Task[]>('/tasks/', {
-      params: { skip, limit },
+  async getTasks(params: TaskQueryParams = {}): Promise<TaskPage> {
+    const response = await api.get<TaskPage>('/tasks/', {
+      params: buildTaskParams(params),
     });
+    return response.data;
+  },
+
+  async getAllTasks(params: Omit<TaskQueryParams, 'skip' | 'limit'> = {}): Promise<Task[]> {
+    const pageSize = 100;
+    let skip = 0;
+    let total = Infinity;
+    const allTasks: Task[] = [];
+
+    while (skip < total) {
+      const page = await this.getTasks({ ...params, skip, limit: pageSize });
+      allTasks.push(...page.items);
+      total = page.total;
+      skip += pageSize;
+    }
+
+    return allTasks;
+  },
+
+  async getTaskOwners(): Promise<string[]> {
+    const response = await api.get<string[]>('/tasks/owners');
     return response.data;
   },
 

@@ -29,3 +29,9 @@ class TaskInDBBase(TaskBase):
 
 class Task(TaskInDBBase):
     pass
+
+class TaskPage(BaseModel):
+    items: list[Task]
+    total: int
+    skip: int
+    limit: int

@@ -1,70 +1,100 @@
 import type { FC } from 'react';
-import { useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTasks } from '../hooks/useTasks';
 import { FilterBar } from '../components/FilterBar';
 import { TaskTable } from '../components/TaskTable';
+import { Pagination } from '../components/Pagination';
 import { EditTaskModal } from '../components/EditTaskModal';
 import { DeleteConfirmationModal } from '../components/DeleteConfirmationModal';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { EmptyState } from '../components/EmptyState';
 import { exportToCsv } from '../utils/exportCsv';
-import { Task } from '../types';
+import { taskService } from '../services/taskService';
+import { Task, TaskPriority, TaskStatus } from '../types';
 import { Download, AlertCircle } from 'lucide-react';
 
 export const TaskManagement: FC = () => {
   const navigate = useNavigate();
   const {
     tasks,
+    total,
+    skip,
+    limit,
     isLoading,
     error,
     fetchTasks,
     updateTask,
     deleteTask,
+    setSkip,
   } = useTasks();
 
-  // Modals state
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
+  const [ownersList, setOwnersList] = useState<string[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOwner, setSelectedOwner] = useState('');
   const [selectedPriority, setSelectedPriority] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
 
+  const queryParams = {
+    skip,
+    search: searchQuery || undefined,
+    owner: selectedOwner || undefined,
+    priority: (selectedPriority || undefined) as TaskPriority | undefined,
+    status: (selectedStatus || undefined) as TaskStatus | undefined,
+  };
+
+  const loadTasks = useCallback(() => {
+    fetchTasks(queryParams);
+  }, [fetchTasks, skip, searchQuery, selectedOwner, selectedPriority, selectedStatus]);
+
   useEffect(() => {
-    fetchTasks();
-  }, [fetchTasks]);
+    taskService.getTaskOwners().then(setOwnersList).catch(() => setOwnersList([]));
+  }, []);
 
-  // Unique list of owners for FilterBar
-  const ownersList = useMemo(() => {
-    const owners = tasks.map((t) => t.owner || 'Unassigned');
-    return Array.from(new Set(owners)).filter(Boolean);
-  }, [tasks]);
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
 
-  // Filter tasks based on query controls
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      const matchesSearch = task.description
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
+  const resetPagination = () => setSkip(0);
 
-      const matchesOwner = selectedOwner
-        ? (task.owner || 'Unassigned').toLowerCase() === selectedOwner.toLowerCase()
-        : true;
+  const handleSearchChange = (value: string) => {
+    resetPagination();
+    setSearchQuery(value);
+  };
 
-      const matchesPriority = selectedPriority ? task.priority === selectedPriority : true;
+  const handleOwnerChange = (value: string) => {
+    resetPagination();
+    setSelectedOwner(value);
+  };
 
-      const matchesStatus = selectedStatus ? task.status === selectedStatus : true;
+  const handlePriorityChange = (value: string) => {
+    resetPagination();
+    setSelectedPriority(value);
+  };
 
-      return matchesSearch && matchesOwner && matchesPriority && matchesStatus;
-    });
-  }, [tasks, searchQuery, selectedOwner, selectedPriority, selectedStatus]);
+  const handleStatusChange = (value: string) => {
+    resetPagination();
+    setSelectedStatus(value);
+  };
 
-  const handleExportCsv = () => {
-    if (filteredTasks.length > 0) {
-      exportToCsv(filteredTasks);
+  const handleExportCsv = async () => {
+    setIsExporting(true);
+    try {
+      const allMatching = await taskService.getAllTasks({
+        search: searchQuery || undefined,
+        owner: selectedOwner || undefined,
+        priority: (selectedPriority || undefined) as TaskPriority | undefined,
+        status: (selectedStatus || undefined) as TaskStatus | undefined,
+      });
+      if (allMatching.length > 0) {
+        exportToCsv(allMatching);
+      }
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -76,12 +106,22 @@ export const TaskManagement: FC = () => {
     if (!editingTask) return;
     await updateTask(editingTask.id, updatedData);
     setEditingTask(null);
+    loadTasks();
   };
 
   const handleDeleteTask = async () => {
     if (!deletingTask) return;
+    const isLastItemOnPage = tasks.length === 1;
+    const shouldGoBack = isLastItemOnPage && skip > 0;
+
     await deleteTask(deletingTask.id);
     setDeletingTask(null);
+
+    if (shouldGoBack) {
+      setSkip(skip - limit);
+    } else {
+      loadTasks();
+    }
   };
 
   const handleClearFilters = () => {
@@ -89,9 +129,18 @@ export const TaskManagement: FC = () => {
     setSelectedOwner('');
     setSelectedPriority('');
     setSelectedStatus('');
+    setSkip(0);
   };
 
-  if (isLoading && tasks.length === 0) {
+  const handlePageChange = (nextSkip: number) => {
+    setSkip(nextSkip);
+  };
+
+  const hasActiveFilters = Boolean(
+    searchQuery || selectedOwner || selectedPriority || selectedStatus
+  );
+
+  if (isLoading && tasks.length === 0 && total === 0) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <LoadingSpinner size="lg" />
@@ -101,7 +150,6 @@ export const TaskManagement: FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-100 pb-5">
         <div>
           <h2 className="text-2xl font-bold text-brand-heading tracking-tight font-serif">Task Management</h2>
@@ -112,11 +160,11 @@ export const TaskManagement: FC = () => {
         <div className="flex items-center gap-3">
           <button
             onClick={handleExportCsv}
-            disabled={filteredTasks.length === 0}
+            disabled={total === 0 || isExporting}
             className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded font-inter text-xs font-semibold uppercase tracking-wider text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-4 w-4" />
-            Export Filtered CSV
+            {isExporting ? 'Exporting...' : 'Export Filtered CSV'}
           </button>
         </div>
       </div>
@@ -131,39 +179,47 @@ export const TaskManagement: FC = () => {
         </div>
       )}
 
-      {tasks.length === 0 ? (
+      {total === 0 && !hasActiveFilters ? (
         <EmptyState />
       ) : (
         <div className="space-y-6">
           <FilterBar
             searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
+            onSearchChange={handleSearchChange}
             selectedOwner={selectedOwner}
-            onOwnerChange={setSelectedOwner}
+            onOwnerChange={handleOwnerChange}
             selectedPriority={selectedPriority}
-            onPriorityChange={setSelectedPriority}
+            onPriorityChange={handlePriorityChange}
             selectedStatus={selectedStatus}
-            onStatusChange={setSelectedStatus}
+            onStatusChange={handleStatusChange}
             onClearFilters={handleClearFilters}
             ownersList={ownersList}
           />
 
-          {filteredTasks.length === 0 ? (
+          {tasks.length === 0 ? (
             <div className="p-12 text-center text-slate-500 bg-white border border-slate-200 rounded-lg shadow-sm">
               No tasks matched your active filter configuration. Click Clear to start over.
             </div>
           ) : (
-            <TaskTable
-              tasks={filteredTasks}
-              onView={handleViewDetails}
-              onEdit={setEditingTask}
-              onDelete={setDeletingTask}
-            />
+            <div className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+              <TaskTable
+                tasks={tasks}
+                onView={handleViewDetails}
+                onEdit={setEditingTask}
+                onDelete={setDeletingTask}
+              />
+              <Pagination
+                skip={skip}
+                limit={limit}
+                total={total}
+                onPageChange={handlePageChange}
+                isLoading={isLoading}
+              />
+            </div>
           )}
         </div>
       )}
 
-      {/* Modals */}
       {editingTask && (
         <EditTaskModal
           task={editingTask}

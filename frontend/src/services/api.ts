@@ -16,8 +16,15 @@ api.interceptors.response.use(
   (error) => {
     let message = 'An unexpected error occurred.';
     if (error.response) {
-      // Backend returned an error response
-      message = error.response.data?.detail || error.response.data?.message || message;
+      const status = error.response.status;
+      if (status === 429) {
+        const retryAfter = error.response.headers?.['retry-after'];
+        message = retryAfter
+          ? `Too many requests. Please wait ${retryAfter} seconds and try again.`
+          : 'Too many requests. Please try again later.';
+      } else {
+        message = error.response.data?.detail || error.response.data?.message || message;
+      }
     } else if (error.request) {
       // No response was received (network issue or timeout)
       message = 'Unable to connect to the backend server. Please check if the backend is running.';

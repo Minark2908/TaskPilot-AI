@@ -19,3 +19,19 @@ export interface TaskUpdate {
   priority?: TaskPriority;
   status?: TaskStatus;
 }
+
+export interface TaskPage {
+  items: Task[];
+  total: number;
+  skip: number;
+  limit: number;
+}
+
+export interface TaskQueryParams {
+  skip?: number;
+  limit?: number;
+  search?: string;
+  owner?: string;
+  priority?: TaskPriority | '';
+  status?: TaskStatus | '';
+}

@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "gemini-2.5-flash"
     LLM_TIMEOUT: float = 60.0
 
+    # Rate Limiting Configuration
+    RATE_LIMIT_REQUESTS: int = 5
+    RATE_LIMIT_WINDOW: int = 60
+
+    # Pagination defaults
+    DEFAULT_PAGE_SIZE: int = 10
+    MAX_PAGE_SIZE: int = 100
+
     @property
     def cors_origins(self) -> List[str]:
         return [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]
